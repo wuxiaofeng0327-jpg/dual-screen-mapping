@@ -1,0 +1,134 @@
+<!doctype html><html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>双幕映射</title><meta name="description" content="天幕与环幕映射工具：本地视频和图片、贝塞尔网格、固定眼位 3D 预览与 H.264 输出。素材留在你的设备上。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='4' width='24' height='24' rx='4' fill='%23ccc'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">{"imports":{"three":"/vendor/build/three.module.js","three/addons/":"/vendor/examples/jsm/"}}</script>
+</head>
+<body>
+<header>
+  <span class="brand">双幕</span>
+  <button id="chooseVideo" title="导入视频或 PNG、JPG、WebP、BMP 图片">导入素材</button>
+  <button id="clearMedia" title="卸载当前素材并恢复测试网格，保留映射参数" disabled>清空素材</button>
+  <span id="sourceName" class="filename">未选择素材</span><span id="sourceSize" class="source-size">—</span>
+  <div class="spacer"></div>
+  <button id="loadProject" title="打开映射工程">打开</button><button id="saveProject" title="保存映射工程">保存</button>
+  <button id="openOutput">输出</button><button id="help" title="操作说明" aria-label="操作说明">?</button>
+</header>
+<main id="workspace">
+  <section id="scenePanel" class="view-panel">
+    <div class="view-toolbar scene-toolbar">
+      <span class="view-title">3D</span>
+      <div class="segmented"><button id="viewOrbit">自由</button><button id="viewEye" class="active" title="固定在观众位置，离地 1.5 米；左键转头，滚轮调整视野宽度">固定眼位</button><button id="viewTop">俯视</button><button id="viewUnder">仰视</button></div>
+      <button id="openViewSettings" title="调整观察方向与视野，不改变贴图映射">视角调整</button>
+      <label title="反转鼠标左右转头与旋转方向，适用于固定眼位和自由观察；不改变上下方向或网格编辑"><input type="checkbox" id="reverseLookX" checked>左右反向</label>
+      <label><input type="checkbox" id="showRoof" checked>天幕</label>
+      <label><input type="checkbox" id="showGrid" checked>网格</label>
+      <label title="黄色标记天幕与环幕实际接缝，仅供预览，不会导出"><input type="checkbox" id="showSeam" checked>接缝线</label>
+      <label><input type="checkbox" id="showSeats" checked>座椅</label>
+      <label title="相机低于地面时自动隐藏座椅，回到地面以上恢复；手动关闭座椅时始终隐藏"><input type="checkbox" id="hideSeatsBelow" checked>地下隐藏座椅</label>
+      <label><input id="diagnostic" type="checkbox" checked>未覆盖提示</label>
+      <label><input type="checkbox" id="drag3D">编辑</label>
+      <div class="spacer"></div><button id="toggleParameters" class="active" aria-pressed="true" aria-controls="mappingParameters" title="收起右侧参数菜单">参数</button><button id="maximizeScene" title="放大或还原 3D 区域" aria-label="放大或还原 3D 区域">⤢</button>
+    </div>
+    <div class="scene-layout"><div id="sceneStage" class="stage"><canvas id="sceneCanvas"></canvas></div><aside id="mappingParameters" class="parameter-panel" aria-label="映射参数">
+    <button id="humanProjection" title="载入 2026-10-20 Blender 人眼角度投射，清除网格变形并进入固定眼位；可撤销">人眼投射</button>
+    <div class="button-row"><button id="fitWidth">宽度对齐</button><button id="fitHeight">纵向覆盖双幕</button></div>
+    <div class="control" data-key="scaleX"><label>横向缩放 <output></output></label><input type="range" min=".3" max="2" step=".005"></div>
+    <div class="control" data-key="scaleY"><label>纵向缩放 <output></output></label><input type="range" min=".1" max="4" step=".005"></div>
+    <div class="control" data-key="offsetY"><label>上下移动 <output></output></label><input type="range" min="-.8" max=".8" step=".002"></div>
+    <div class="control" data-key="offsetX"><label>左右移动 <output></output></label><input type="range" min="-.5" max=".5" step=".002"></div>
+    <div class="control" data-key="horizon"><label>水平固定线 <output></output></label><input type="range" min="0" max="1" step=".005"></div>
+
+    <details class="coordinates"><summary>坐标</summary><div class="coordinate-card"><div>素材 <span id="sourceCoord">—</span></div><div>投射 <span id="destCoord">—</span></div><div>幕面 <span id="surfaceCoord">—</span></div></div></details>
+  </aside></div>
+  </section>
+  <div id="splitter" role="separator" aria-label="调整上下区域大小" tabindex="0"></div>
+  <section id="warpPanel" class="view-panel">
+    <div class="view-toolbar edit-toolbar">
+      <div class="segmented"><button id="modePoint" class="active">控制点</button><button id="modeRow">整行</button><button id="modeCol">整列</button></div>
+      <label title="整行、整列移动时的影响范围" class="influence-label"><select id="influence"><option value="1">仅选中</option><option value="1.5" selected>邻近过渡</option><option value="2.5">宽范围</option></select></label>
+      <label><input type="checkbox" id="showHandles" checked>手柄</label>
+      <label title="控制点模式：以中央竖线为轴，左右交点及手柄镜像联动"><input type="checkbox" id="mirrorEdit" checked>左右对称</label>
+      <label title="开启时只安排控制点、手柄或行列的位置，画面保持不动；外边界固定。关闭后按新网格变形"><input type="checkbox" id="layoutOnly">仅移动网格</label>
+      <button id="addSeam">添加拼接线</button>
+      <select id="editRegion" aria-label="编辑幕面范围" title="选择天幕或环幕时固定拼接控制线及另一侧；双幕允许调整全部控制点" hidden><option value="both">双幕</option><option value="roof">天幕</option><option value="wrap">环幕</option></select>
+      <label title="靠近控制点原位或本次拖动起点的水平、垂直位置时吸附；拖动中按住 Alt 临时关闭"><input type="checkbox" id="snapPoints" checked>原位吸附</label>
+      <div class="density"><input id="gridCols" type="number" min="1" max="32" value="8" aria-label="网格列数" title="网格列数：1–32"><span>×</span><input id="gridRows" type="number" min="1" max="24" value="4" aria-label="网格行数" title="网格行数：1–24"><button id="applyDensity">应用</button></div>
+      <button id="undo" title="撤销 Ctrl+Z" aria-label="撤销">↶</button><button id="redo" title="重做 Ctrl+Shift+Z" aria-label="重做">↷</button>
+      <label><input id="protect" type="checkbox">保护中央</label><label><input id="lockBoundary" type="checkbox">固定边界</label>
+      <button id="smoothPoint" title="恢复选中点的自动平滑手柄">平滑</button>
+      <button id="resetLine" title="重置选中的点或控制线">重置选中</button>
+      <button id="resetGrid">重置网格</button><button id="resetAll">全部重置</button>
+      <div class="spacer"></div><button id="toggleSource">原片</button><button id="fitEditor" title="适应编辑区域，重置缩放和平移">适应</button>
+      <button id="maximizeWarp" title="放大或还原编辑区域" aria-label="放大或还原编辑区域">⤢</button>
+    </div>
+    <div class="warp-layout">
+    <div id="warpStage" class="stage"><canvas id="warpCanvas"></canvas><canvas id="warpOverlay"></canvas>
+      <aside id="sourcePanel" class="source-popover" hidden>
+        <div class="popover-bar"><select id="sourceSelect" aria-label="选择已导入素材"></select><button id="closeSource" aria-label="关闭原片">×</button></div>
+        <div id="sourceStage"><video id="video" playsinline preload="metadata" loop></video><img id="stillImage" alt="原始图片预览" hidden><canvas id="sourceOverlay"></canvas><div id="sourceEmpty">选择图片或视频</div></div>
+        <div class="popover-bar"><span id="markerInfo">点击原片定位</span><button id="proxy">兼容预览</button></div>
+      </aside>
+    </div>
+
+    </div>
+<footer>
+  <button id="play" aria-label="播放或暂停">▶</button><button id="prevFrame" title="上一帧">Ⅰ‹</button><button id="nextFrame" title="下一帧">›Ⅰ</button>
+  <button id="loopPlayback" class="active" aria-label="循环播放" aria-pressed="true" title="关闭循环播放">循环</button>
+  <span id="timecode">00:00.000 / 00:00.000</span><input type="range" id="timeline" min="0" max="1" step=".001" value="0" aria-label="视频时间轴">
+  <button id="mute">静音</button><span id="lineLabel"></span>
+</footer>
+  </section>
+</main>
+
+<dialog id="viewDialog" class="drawer">
+  <div class="dialog-title">视角调整<button data-close="viewDialog" aria-label="关闭视角调整">×</button></div>
+  <div class="dialog-body">
+    <div class="view-control" data-view-key="yaw"><label for="viewYaw">左右转头 <span><input id="viewYawNumber" type="number" min="-180" max="180" step=".1" aria-label="左右转头角度"> °</span></label><input id="viewYaw" type="range" min="-180" max="180" step=".1"></div>
+    <div class="view-control" data-view-key="pitch"><label for="viewPitch">上下转头 <span><input id="viewPitchNumber" type="number" min="-89" max="89" step=".1" aria-label="上下转头角度"> °</span></label><input id="viewPitch" type="range" min="-89" max="89" step=".1"></div>
+    <div class="view-control" data-view-key="hfov"><label for="viewFov">水平视角 <span><input id="viewFovNumber" type="number" min="20" max="150" step=".1" aria-label="水平视角度数"> °</span></label><input id="viewFov" type="range" min="20" max="150" step=".1"></div>
+    <button id="resetView" class="full" title="恢复正前方、抬头 10°、水平视角约 73.7°；位置不变">复位视角</button>
+  </div>
+</dialog>
+
+<dialog id="outputDialog">
+  <div class="dialog-title">输出<button data-close="outputDialog" aria-label="关闭输出">×</button></div>
+  <div class="dialog-body">
+    <div class="output-options">
+      <label class="output-card"><input type="checkbox" name="kind" value="wrap" checked><span>环幕展开</span><span id="sizeWrap">—</span></label>
+      <label class="output-card"><input type="checkbox" name="kind" value="roof" checked><span>天幕平面</span><span id="sizeRoof">—</span></label>
+      <label class="output-card"><input type="checkbox" name="kind" value="combined" checked><span>双幕拼接</span><span id="sizeCombined">—</span></label>
+      <label class="output-card"><input type="checkbox" name="kind" value="warp"><span>原画幅变形</span><span id="sizeWarp">—</span></label>
+    </div>
+    <div class="export-settings"><label>宽度 <input id="outWidth" type="number" min="16" max="16384" step="2" value="4398"> px</label><label id="bitrateSetting">H.264 <input id="bitrate" type="number" min="1" max="200" value="30"> Mbps</label></div>
+    <label id="folderOption" class="check"><input id="saveToFolder" type="checkbox">保存到文件夹</label>
+    <div class="button-row"><button id="exportImage">输出当前帧</button><button id="exportVideo" class="accent">导出视频</button></div>
+    <div id="exportProgress" hidden><progress id="progress" max="1" value="0"></progress><span id="progressText"></span><button id="cancelExport">取消</button></div>
+    <div id="exportFiles"></div>
+  </div>
+</dialog>
+<dialog id="helpDialog"><div class="dialog-title">操作<button id="closeHelp" aria-label="关闭帮助">×</button></div><div class="dialog-body">
+  <p>素材在你的浏览器中读取和处理，不上传服务器。工程仅保存映射参数，重新打开时需重新选择素材。视频导出建议使用桌面 Chrome 或 Edge；具体解码格式和最大尺寸取决于浏览器与显卡。不支持时会提示，不会自动缩小输出。</p><p>输出默认为 H.264、30 Mbps 目标码率，声音保留。短文件可点击结果下载；长视频使用“保存到文件夹”直接写入磁盘。实际平均码率由编码器和画面决定。导出时请保持页面打开。</p><p>清空素材：卸载素材并恢复测试网格，保留当前映射。映射参数固定在 3D 窗口右侧。</p><p>导入素材：支持视频及 PNG、JPG、WebP、BMP 图片。图片使用同一套网格和 3D 投射；输出图片可生成四种规格的 PNG，保留输入宽度。透明区域按黑色处理，动态图片读取首帧。</p>
+  <p>控制点：拖动交点改变局部位置，拖动圆形手柄改变曲率。每个点的左右、上下手柄对称联动。</p>
+  <p>左右对称：默认开启。在控制点模式中，一侧交点横向移动时另一侧反向移动，纵向移动时两侧同向移动；手柄也镜像联动。中央列的交点只允许上下移动。打开已有工程时沿用保存的开关。</p>
+  <p>仅移动网格：开启后可重新安排内部控制点、手柄和整行整列，已有画面保持不动，外边界固定以保持覆盖范围。将控制线放到需要调整区域的边缘，再关闭开关，继续拖动即可按新区域变形。支持重复调整、撤销和工程保存；3D 网格同步更新，图片及视频输出使用相同映射。</p>
+  <p>添加拼接线：按实际天幕、环幕接缝增加一行黄色控制点，曲线随投射关系弯曲，现有画面保持不动。两侧控制网格会重新分布，必要时增加列数以贴合曲线。选择“天幕”或“环幕”可固定拼接控制线及另一侧，选择“双幕”可以直接调整拼接控制线。修改整体投射参数后，点击“重建拼接线”重新对齐；不会重复增加行。</p>
+  <p>原位吸附：默认开启。控制点靠近原位或本次拖动起点的水平、垂直轴线时吸附，并显示浅蓝色辅助线；整行整列也支持吸附。距离按编辑区的屏幕像素计算，不随缩放变得过强。拖动中按住 Alt 可临时关闭，贝塞尔手柄保持自由调整。“仅移动网格”关闭时，新位置成为后续变形的原位。</p>
+  <p>整行 / 整列：拖动控制线可同时水平、垂直移动；按住 Shift 限制为单一方向。</p>
+  <p>网格密度：输入列数与行数后点“应用”，保留当前形变。列数 1–32，行数 1–24。</p>
+  <p>编辑区：滚轮缩放，中键或 Alt＋左键平移；“适应”恢复视图。</p>
+  <p>3D：左键旋转、滚轮缩放、右键平移，可从幕面下方观察。开启“编辑”可直接拖动幕面上的控制点或行列。</p>
+  <p>固定眼位：位置锁定在 Blender 的观众眼位，左键拖动只转头；滚轮向上收窄视野、向下扩大视野，范围 20°–150°，相机位置不变。“视角调整”可输入转头角度与水平视角，只改变观察画面，不改变映射或输出。开启“编辑”时拖动仍用于调整贴图。</p>
+  <p>左右反向：反转鼠标横向拖动的观察方向，适用于固定眼位和自由旋转。上下转头、滚轮、视角数值及网格编辑不受影响；开关随工程保存。</p>
+  <p>影院地面只从上方可见，从地下观察时背面透明。固定眼位离地 1.5 米。座椅沿用 Blender 的 6 排、156 席；“座椅”控制显示，“地下隐藏座椅”在相机低于地面时自动隐藏，回到上方恢复。两项开关随工程保存，地面和座椅不进入贴图输出。</p>
+  <p>人眼投射：载入 2026-10-20 Blender 重建后的基础投射，按当前视频尺寸转换参数，重置局部网格并切换到固定眼位。可撤销；之后仍可继续调整映射。相机默认向前抬头 10°，水平视角约 73.7°。</p>
+  <p>接缝线：黄色线标出天幕与环幕的实际交界，可独立开关，只在 3D 预览中显示。</p>
+  <p>拖动中间分隔线分配上下空间，右侧 ⤢ 放大单个区域。点“原片”显示定位窗口。</p>
+  <p>空格播放 / 暂停；Ctrl+Z 撤销；Ctrl+Shift+Z 重做。导出读取原视频，不包含网格、标记和手柄。</p>
+</div></dialog>
+<input type="file" id="videoFile" accept="video/*,.mkv,.avi,.png,.jpg,.jpeg,.webp,.bmp" hidden><input type="file" id="projectFile" accept=".json" hidden>
+<div id="toast" role="status"></div><span id="status" class="sr-only" aria-live="polite"></span>
+<script type="module" src="/app.js"></script>
+</body></html>
