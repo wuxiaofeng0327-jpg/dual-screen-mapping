@@ -634,7 +634,7 @@ async function preloadSample(){
   const abort=sampleAbort=new AbortController(),serial=sourceSerial;
   $('sourceName').textContent='正在载入 21-9…';$('clearMedia').disabled=false;
   try{
-    const response=await fetch('/samples/21-9-h264.mp4',{signal:abort.signal});
+    const response=await fetch(new URL('./samples/21-9-h264.mp4',import.meta.url),{signal:abort.signal});
     if(!response.ok)throw Error('测试视频暂时无法载入，可自行导入素材');
     const file=new File([await response.blob()],'21-9.mp4',{type:'video/mp4'});
     if(abort.signal.aborted||serial!==sourceSerial)return;
@@ -731,7 +731,7 @@ async function loadProject(file){
   updateAll();toast('映射工程已打开；请确认当前素材是否对应');
 }
 async function main(){
-  [config,eyePreset,seatsData]=await Promise.all([api('/scene.json').then(scene=>({scene,sources:[]})),api('/eye-preset.json'),api('/seats.json')]);
+  [config,eyePreset,seatsData]=await Promise.all([api(new URL('./scene.json',import.meta.url)).then(scene=>({scene,sources:[]})),api(new URL('./eye-preset.json',import.meta.url)),api(new URL('./seats.json',import.meta.url))]);
   model=config.scene;params=defaultParams();
   setupRenderers();initInteractions();sourceOptions();syncMediaControls();
   $('folderOption').hidden=!window.showDirectoryPicker;$('saveToFolder').checked=!!window.showDirectoryPicker;
